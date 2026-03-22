@@ -1,0 +1,52 @@
+{
+  "numerical_features": [
+    "loan_amnt",
+    "annual_inc",
+    "dti",
+    "open_acc",
+    "revol_bal",
+    "revol_util",
+    "total_acc",
+    "installment",
+    "pub_rec",
+    "mort_acc",
+    "pub_rec_bankruptcies"
+  ],
+  "categorical_features": [
+    "term",
+    "grade",
+    "sub_grade",
+    "emp_length",
+    "home_ownership",
+    "verification_status",
+    "purpose",
+    "addr_state",
+    "initial_list_status",
+    "application_type"
+  ],
+  "all_features": [
+    "loan_amnt",
+    "annual_inc",
+    "dti",
+    "open_acc",
+    "revol_bal",
+    "revol_util",
+    "total_acc",
+    "installment",
+    "pub_rec",
+    "mort_acc",
+    "pub_rec_bankruptcies",
+    "term",
+    "grade",
+    "sub_grade",
+    "emp_length",
+    "home_ownership",
+    "verification_status",
+    "purpose",
+    "addr_state",
+    "initial_list_status",
+    "application_type"
+  ],
+  "n_train": 160000,
+  "n_test": 40000
+}
