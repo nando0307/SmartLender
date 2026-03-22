@@ -1,35 +1,33 @@
-"""1_Predict.py — Single loan prediction page."""
+"""1_Predict.py — Loan prediction with premium fintech UI."""
 import streamlit as st
 import pandas as pd
-import sys
-import os
-import time
+import sys, os, time
 
-# Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
+st.set_page_config(page_title="Predict — SmartLend", page_icon="🔮", layout="wide")
+
+from app.components.theme import inject_css, hero, metric_card, section_header, badge, divider
 from app.components.model_loader import load_module_models
 from app.components.input_form import build_loan_form
 from app.components.charts import risk_bar_chart
 
-st.set_page_config(page_title="Predict — SmartLend", page_icon="🔮", layout="wide")
-st.title("🔮 Loan Prediction")
-st.markdown("Enter a loan application and see all 8 models predict simultaneously.")
+inject_css()
 
-# Build the input form
+hero("🔮 Loan Prediction", "Enter a loan application and see all algorithms predict simultaneously.")
+
 input_df = build_loan_form()
 
 if input_df is not None:
-    st.markdown("---")
+    divider()
 
-    # Load models
     models = load_module_models('module_a')
 
     if not models:
         st.warning("⚠️ No trained models found in `models/module_a/`. Run notebook 01 first.")
     else:
-        st.subheader(f"📊 Results from {len(models)} Algorithms")
+        section_header(f"Predictions from {len(models)} Algorithms")
 
         predictions = []
         for name, model in models.items():
@@ -48,7 +46,6 @@ if input_df is not None:
                     prob = model.predict_proba(input_df)[0][1] if hasattr(model, 'predict_proba') else None
 
                 elapsed = time.time() - start
-
                 risk_pct = (prob * 100) if prob is not None else (pred * 100)
                 decision = 'Deny' if pred == 1 else 'Approve'
 
@@ -65,60 +62,33 @@ if input_df is not None:
         if predictions:
             pred_df = pd.DataFrame(predictions)
 
-            # Summary cards
             approve_count = (pred_df['decision'] == 'Approve').sum()
             deny_count = (pred_df['decision'] == 'Deny').sum()
             avg_risk = pred_df['risk_pct'].mean()
+            consensus = "APPROVE" if approve_count > deny_count else "DENY"
 
-            col1, col2, col3 = st.columns(3)
-            col1.metric("✅ Approve", approve_count)
-            col2.metric("❌ Deny", deny_count)
-            col3.metric("📈 Avg Risk", f"{avg_risk:.1f}%")
+            # Metric cards
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.markdown(metric_card("Approve", str(approve_count), "emerald"), unsafe_allow_html=True)
+            with col2:
+                st.markdown(metric_card("Deny", str(deny_count), "red"), unsafe_allow_html=True)
+            with col3:
+                st.markdown(metric_card("Avg Risk", f"{avg_risk:.1f}%", "gold"), unsafe_allow_html=True)
+            with col4:
+                variant = "emerald" if consensus == "APPROVE" else "red"
+                st.markdown(metric_card("Consensus", consensus, variant), unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
 
             # Results table
+            display_df = pred_df[['algorithm', 'decision', 'risk_pct', 'confidence', 'time_ms']].copy()
+            display_df.columns = ['Algorithm', 'Decision', 'Risk %', 'Confidence %', 'Time (ms)']
             st.dataframe(
-                pred_df[['algorithm', 'decision', 'risk_pct', 'confidence', 'time_ms']]
-                .style.applymap(
-                    lambda v: 'color: green' if v == 'Approve' else ('color: red' if v == 'Deny' else ''),
-                    subset=['decision']
-                )
-                .format({'risk_pct': '{:.1f}%', 'confidence': '{:.1f}%', 'time_ms': '{:.1f}ms'}),
+                display_df.style.format({'Risk %': '{:.1f}', 'Confidence %': '{:.1f}', 'Time (ms)': '{:.1f}'}),
                 use_container_width=True,
+                hide_index=True,
             )
 
-            # Risk bar chart
+            # Risk chart
             st.plotly_chart(risk_bar_chart(pred_df), use_container_width=True)
-
-    # Batch upload
-    with st.expander("📁 Batch Upload"):
-        uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
-        if uploaded_file is not None:
-            batch_df = pd.read_csv(uploaded_file)
-            st.write(f"Uploaded {len(batch_df)} loans")
-
-            if models:
-                batch_results = []
-                for name, model in models.items():
-                    try:
-                        start = time.time()
-                        is_catboost = 'catboost' in name.lower()
-                        if is_catboost:
-                            pred_batch = batch_df.copy()
-                            for col in pred_batch.select_dtypes(include=['object', 'category']).columns:
-                                pred_batch[col] = pred_batch[col].fillna('Missing').astype(str)
-                            preds = model.predict(pred_batch)
-                        else:
-                            preds = model.predict(batch_df)
-                        elapsed = time.time() - start
-                        defaults = preds.sum()
-                        batch_results.append({
-                            'algorithm': name,
-                            'defaults': int(defaults),
-                            'default_rate': f"{defaults/len(preds)*100:.1f}%",
-                            'time_s': f"{elapsed:.2f}s",
-                        })
-                    except Exception as e:
-                        st.warning(f"⚠️ {name} failed on batch: {e}")
-
-                if batch_results:
-                    st.dataframe(pd.DataFrame(batch_results), use_container_width=True)

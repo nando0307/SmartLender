@@ -1,53 +1,54 @@
-"""3_Explainer.py — SHAP explanations page."""
+"""3_Explainer.py — SHAP explanations with fintech design."""
 import streamlit as st
 import pandas as pd
 import numpy as np
-import os
-import sys
+import os, sys
 import shap
 import matplotlib.pyplot as plt
 
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
+st.set_page_config(page_title="Explainer — SmartLend", page_icon="🔍", layout="wide")
+
+from app.components.theme import inject_css, hero, section_header, divider
 from app.components.model_loader import load_module_models, get_available_modules
 
-st.set_page_config(page_title="Explainer — SmartLend", page_icon="🔍", layout="wide")
-st.title("🔍 SHAP Explainer")
-st.markdown("Understand **why** each model makes its predictions using SHAP values.")
+inject_css()
 
-# Module and model selection
+hero("🔍 SHAP Explainer", "Understand why each model makes its predictions using SHAP values.")
+
 available = get_available_modules()
 if not available:
     st.warning("⚠️ No trained models found. Run the notebooks first.")
     st.stop()
 
-selected_module = st.selectbox("Select Module", available)
-models = load_module_models(selected_module)
+col1, col2 = st.columns(2)
+with col1:
+    selected_module = st.selectbox("Select Module", available)
+with col2:
+    models = load_module_models(selected_module)
+    if not models:
+        st.warning(f"⚠️ No models for {selected_module}.")
+        st.stop()
+    selected_algorithm = st.selectbox("Select Algorithm", list(models.keys()))
 
-if not models:
-    st.warning(f"⚠️ No models found for {selected_module}.")
-    st.stop()
-
-selected_algorithm = st.selectbox("Select Algorithm", list(models.keys()))
 model = models[selected_algorithm]
 
-# Load sample test data
+# Load test data
 test_path = os.path.join(project_root, 'data', 'processed', 'test.parquet')
 if not os.path.exists(test_path):
-    st.warning("⚠️ Test data not found at `data/processed/test.parquet`. Run notebook 00 first.")
+    st.warning("⚠️ Test data not found. Run notebook 00 first.")
     st.stop()
 
 test_df = pd.read_parquet(test_path)
 
-# Determine feature columns
 from src.config import ALL_FEATURES
 feature_cols = [c for c in ALL_FEATURES if c in test_df.columns]
 X_test = test_df[feature_cols]
 
-st.info(f"Using {len(X_test)} test samples. SHAP computation may take a moment...")
+divider()
 
-# Compute SHAP values
 max_samples = st.slider("Max samples for SHAP", min_value=50, max_value=500, value=100, step=50)
 
 with st.spinner("Computing SHAP values..."):
@@ -63,7 +64,6 @@ with st.spinner("Computing SHAP values..."):
             feature_names = list(X_sample.columns)
             X_display = X_sample
         elif hasattr(model, 'named_steps'):
-            # Pipeline model — extract preprocessor and inner model
             preprocessor = model.named_steps['preprocessor']
             inner_model = model.named_steps['model']
             X_sample = X_test.head(max_samples)
@@ -85,24 +85,28 @@ with st.spinner("Computing SHAP values..."):
             st.error("Unsupported model format.")
             st.stop()
 
-        # Handle binary classification SHAP output
         if isinstance(shap_values, list) and len(shap_values) == 2:
-            shap_values = shap_values[1]  # Class 1 (default)
+            shap_values = shap_values[1]
 
-        st.success("✅ SHAP values computed successfully!")
+        st.success(f"✅ SHAP values computed for **{selected_algorithm}**")
 
         # Global importance
-        st.subheader("🌍 Global Feature Importance")
+        section_header("Global Feature Importance")
         fig, ax = plt.subplots(figsize=(10, 8))
+        fig.patch.set_facecolor('#0a0e17')
+        ax.set_facecolor('#111827')
         shap.summary_plot(shap_values, X_display, feature_names=feature_names, max_display=15, show=False)
         st.pyplot(fig)
         plt.close()
 
-        # Single prediction explanation
-        st.subheader("🎯 Explain a Single Prediction")
+        divider()
+
+        # Single prediction
+        section_header("Explain a Single Prediction")
         sample_idx = st.number_input("Sample Index", min_value=0, max_value=max_samples - 1, value=0)
 
         fig2, ax2 = plt.subplots(figsize=(12, 5))
+        fig2.patch.set_facecolor('#0a0e17')
         expected = explainer.expected_value
         if not np.isscalar(expected):
             expected = expected[1] if len(expected) > 1 else expected[0]
@@ -122,14 +126,15 @@ with st.spinner("Computing SHAP values..."):
         st.pyplot(fig2)
         plt.close()
 
-        # Show raw feature values
-        st.subheader("📋 Raw Feature Values")
+        divider()
+
+        section_header("Raw Feature Values")
         if isinstance(X_display, pd.DataFrame):
-            st.dataframe(X_display.iloc[[sample_idx]], use_container_width=True)
+            st.dataframe(X_display.iloc[[sample_idx]], use_container_width=True, hide_index=True)
         else:
             st.dataframe(
                 pd.DataFrame([X_display[sample_idx]], columns=feature_names),
-                use_container_width=True,
+                use_container_width=True, hide_index=True,
             )
 
     except Exception as e:
